@@ -1,0 +1,2955 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<br><h1>A1 Report - Regression-Based Analysis </h1>\n",
+    "<h2>Machine Learning - DAT-5303 - FMSBA3 </h2>\n",
+    "By: Sophie Briques<br>\n",
+    "Hult International Business School<br><br><br>\n",
+    "\n",
+    "***"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### Overview"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "- Best performing model was a Linear Regression with 15 features with a test score of 0.8279 and a cross validation score with 11 folds at 0.8076\n",
+    "- Optimal features were found using regularization methods such as Lasso and ARD Regression\n",
+    "- It is predicting the log of revenue, therefore when interpreting coefficients, it is important to transform back using 10<sup>(coef)\n",
+    "\n",
+    "***"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Case: Apprentice Chef, Inc. </strong> <br>\n",
+    "<i> Audience: Top Executives </i> <br>\n",
+    "<strong> Goal: </strong> understand how much revenue to expect from each customer within their first year of orders <br>\n",
+    "<strong> Target consumer: </strong> busy professional, little to no skills in the kitchen <br>\n",
+    "<strong> Product: </strong> daily-prepared gourmet meals delivered <br>\n",
+    "<strong>Channels: </strong> online platform and mobile app <br> \n",
+    "<strong>Revenue: </strong> 90% of revenue comes from customers that have been ordering for 12 months or less\n",
+    "\n",
+    "\n",
+    "<br> Specifications: \n",
+    "- at most 30 min to finish cooking\n",
+    "- disposable cookware\n",
+    "- delicious and healthy eating\n",
+    "<br> Channels: online platform and mobile app\n",
+    "Revenue: 90% of revenue comes from customers that have been ordering for 12 months or less\n",
+    "\n",
+    "\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "***\n",
+    "<strong> Data and Assumptions </strong> <br>\n",
+    "Dataset:\n",
+    "<br> 2,000 customers (approx.)\n",
+    "- at least one purchase per month for a total of 11 of their first 12 months\n",
+    "- at least one purchase per quarter and at least 15 purchases through their first year\n",
+    "- dataset engineering techniques are statistically sound and represent the customers\n",
+    "\n",
+    "\n",
+    "Assumptions:\n",
+    "- all average times are in seconds\n",
+    "- revenue = price x quantity and total meals ordered represent quantity\n",
+    "- when customers attend master classes, they are looking to increase their cooking skills\n",
+    "\n",
+    "***\n",
+    "<strong> Outline: </strong>\n",
+    "1. Part 1: Exploratory Data Analysis\n",
+    "2. Part 2: Transformations\n",
+    "3. Part 3: Build a machine learning model to predict revenue \n",
+    "4. Part 4: Evaluating Model\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Importing Necessary Libraries\n",
+    "import pandas                  as pd  # data science essentials\n",
+    "import matplotlib.pyplot       as plt # essential graphical output\n",
+    "import seaborn                 as sns # enhanced graphical output\n",
+    "import statsmodels.formula.api as smf # regression modeling\n",
+    "from   sklearn.model_selection import train_test_split    # train test split\n",
+    "from   sklearn.neighbors       import KNeighborsRegressor # KNN for Regression\n",
+    "from   sklearn.preprocessing   import StandardScaler      # standard scaler\n",
+    "from   sklearn.linear_model    import LinearRegression    # linear regression (scikit-learn)\n",
+    "from   sklearn.model_selection import cross_val_score     # cross-validation \n",
+    "import sklearn\n",
+    "import numpy as np\n",
+    "# setting pandas print options\n",
+    "pd.set_option('display.max_rows', 500)\n",
+    "pd.set_option('display.max_columns', 500)\n",
+    "pd.set_option('display.width', 1000)\n",
+    "\n",
+    "# specifying file name\n",
+    "file = \"Apprentice_Chef_Dataset.xlsx\"\n",
+    "\n",
+    "\n",
+    "# reading the file into Python\n",
+    "original_df = pd.read_excel(file)\n",
+    "chef_org = original_df.copy()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "## Part 1: Exploratory Data Analysis (EDA)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "#################################################\n",
+    "##########  User-Defined Functions    ###########\n",
+    "#################################################\n",
+    "\n",
+    "# Defining function for distribution histograms\n",
+    "def continuous_distributions(variable, data, bins = 'fd', kde = False, rug = False):\n",
+    "    \"\"\"\n",
+    "    This function can be used for continuous variables\n",
+    "\n",
+    "    PARAMETERS\n",
+    "    ----------\n",
+    "    variable : str, continuous variable\n",
+    "    data     : DataFrame of the response and categorical variables.\n",
+    "    bins     : argument for matplotlib hist(), optional. If unspecified, Freedman–Diaconis rule is used.\n",
+    "    kde      : bool, optional, plot or not a kernel density estimate.  If unspecified, not calculated.\n",
+    "    rug      : bool, optional, include a rug on plot or not. If unspecified, not shown.\n",
+    "    \"\"\"\n",
+    "\n",
+    "    sns.distplot(data[variable],  \n",
+    "                    bins  = bins,\n",
+    "                    kde   = False,\n",
+    "                    rug   = rug,\n",
+    "                    color = 'g')\n",
+    "    \n",
+    "    plt.xlabel(variable)\n",
+    "    plt.tight_layout()\n",
+    "    plt.show()\n",
+    "\n",
+    "# Defining function to flag high outliers in variables\n",
+    "def outlier_flag_hi(variable, threshold, data):\n",
+    "    \"\"\"\n",
+    "    This function is used to flag high outliers in a dataframe the variables' \n",
+    "    outliers by creating a new column that is preceded by 'out_'.\n",
+    "\n",
+    "    PARAMETERS\n",
+    "    ----------\n",
+    "    variable  : str, continuous variable.\n",
+    "    threshold : float, value that will identify where outliers would be.\n",
+    "    data      : dataframe, where the variables are located.\n",
+    "    \n",
+    "    \"\"\"\n",
+    "    # creating a new column\n",
+    "    data['out_' + variable] = 0\n",
+    "        \n",
+    "    # defining outlier condition\n",
+    "    high = data.loc[0:,'out_' + variable][data[variable] > threshold]\n",
+    "        \n",
+    "    # imputing 1 inside flag column\n",
+    "    data['out_' + variable].replace(to_replace = high,\n",
+    "                                    value   = 1,\n",
+    "                                    inplace = True)\n",
+    "\n",
+    "    \n",
+    "\n",
+    "\n",
+    "# Defining function to flag high outliers in variables\n",
+    "def outlier_flag_lo(variable, threshold, data):\n",
+    "    \"\"\"\n",
+    "    This function is used to flag low outliers in a dataframe the variables' \n",
+    "    outliers by creating a new column that is preceded by 'out_'.\n",
+    "\n",
+    "    PARAMETERS\n",
+    "    ----------\n",
+    "    variable  : str, continuous variable.\n",
+    "    threshold : float, value that will identify where outliers would be.\n",
+    "    data      : dataframe, where the variables are located.\n",
+    "    \n",
+    "    \"\"\"\n",
+    "    # creating a new column\n",
+    "    data['out_' + variable] = 0\n",
+    "        \n",
+    "    # defining outlier condition\n",
+    "    low = data.loc[0:,'out_' + variable][data[variable] < threshold]\n",
+    "        \n",
+    "    # imputing 1 inside flag column\n",
+    "    data['out_' + variable].replace(to_replace = low,\n",
+    "                                    value   = 1,\n",
+    "                                    inplace = True)\n",
+    "    \n",
+    "\n",
+    "# Defining function for relationship scatterplots\n",
+    "def scatterplots(independ_var, target_var, data, color = 'g'):\n",
+    "    \"\"\"\n",
+    "    This function can be used for continuous variables\n",
+    "\n",
+    "    PARAMETERS\n",
+    "    ----------\n",
+    "    independ_var : str, continuous variable\n",
+    "    target_var : str, continuous variable we are trying to predict\n",
+    "    data       : DataFrame of the response and categorical variables.\n",
+    "    color      : str, optional. If unspecified, green color is used.\n",
+    "    \"\"\"\n",
+    "\n",
+    "    sns.scatterplot(x = data[independ_var],\n",
+    "                    y = data[target_var],\n",
+    "                    color = color)\n",
+    "    plt.xlabel(independ_var)\n",
+    "    plt.tight_layout()\n",
+    "    plt.show()\n",
+    "\n",
+    "\n",
+    "# Defining function to flag higher variables\n",
+    "def higher_change_flag(variable, index, threshold, data):\n",
+    "    \"\"\"\n",
+    "    This function is used to flag in a dataframe the variables' trend changes above a threshold by creating\n",
+    "    a new column that is preceded by 'change_'.\n",
+    "\n",
+    "    PARAMETERS\n",
+    "    ----------\n",
+    "    variable  : str, continuous variable.\n",
+    "    threshold : float, value that will identify after which the trend on variable y changes\n",
+    "    data      : dataframe, where the variables are located.\n",
+    "    \n",
+    "    \"\"\"\n",
+    "    new_column = 'change_' + variable + \"_\" + str(index)\n",
+    "    \n",
+    "    # creating a new column\n",
+    "    data[new_column] = 0\n",
+    "        \n",
+    "    # defining outlier condition\n",
+    "    high = data.loc[0:,new_column][data[variable] > threshold]\n",
+    "        \n",
+    "    # imputing 1 inside flag column\n",
+    "    data[new_column].replace(to_replace = high,\n",
+    "                                       value   = 1,\n",
+    "                                       inplace = True)\n",
+    "    \n",
+    "\n",
+    "    \n",
+    "# Defining function to flag change at variables\n",
+    "def at_flag(variable, index, threshold, data):\n",
+    "    \"\"\"\n",
+    "    This function is used to flag in a dataframe the variables' trend changes at a threshold by creating\n",
+    "    a new column that is preceded by 'change_'.\n",
+    "\n",
+    "    PARAMETERS\n",
+    "    ----------\n",
+    "    variable  : str, continuous variable.\n",
+    "    threshold : float, value that will identify after which the trend on variable y changes\n",
+    "    data      : dataframe, where the variables are located.\n",
+    "    \n",
+    "    \"\"\"\n",
+    "    new_column = 'change_' + variable + \"_\" + str(index)\n",
+    "    \n",
+    "    # creating a new column\n",
+    "    data[new_column] = 0\n",
+    "        \n",
+    "    # defining outlier condition\n",
+    "    high = data.loc[0:,new_column][data[variable] == threshold]\n",
+    "        \n",
+    "    # imputing 1 inside flag column\n",
+    "    data[new_column].replace(to_replace = high,\n",
+    "                                       value   = 1,\n",
+    "                                       inplace = True)\n",
+    "    \n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# Printing information on our dataset and its columns\n",
+    "# pulling up data dictionary\n",
+    "chef_description = pd.read_excel('Apprentice_Chef_Data_Dictionary.xlsx')\n",
+    "\n",
+    "# Displaying:\n",
+    "#chef_description\n",
+    "#chef_org.info()\n",
+    "#chef_org.describe()\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong>\n",
+    "- Data types are coherent with each variable description\n",
+    "- 47 missing values in Family Name\n",
+    "- Number of observations: 1946\n",
+    "- Total of 28 variables (including target variable) where:\n",
+    "    - 3 are floats\n",
+    "    - 22 are integers\n",
+    "    - 4 are objects"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Step 1: </strong> Classifying our variables based on variable types:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "\"\"\"\n",
+    "# CONTINUOUS OR INTERVAL\n",
+    "REVENUE                     \n",
+    "AVG_TIME_PER_SITE_VISIT        \n",
+    "FOLLOWED_RECOMMENDATIONS_PCT\n",
+    "AVG_PREP_VID_TIME\n",
+    "LARGEST_ORDER_SIZE\n",
+    "MEDIAN_MEAL_RATING             (interval)\n",
+    "AVG_CLICKS_PER_VISIT\n",
+    "\n",
+    "# BINARY\n",
+    "CROSS_SELL_SUCCESS     (target variable)\n",
+    "MOBILE_NUMBER          (also categorical)\n",
+    "TASTES_AND_PREFERENCES (also categorical)\n",
+    "PACKAGE_LOCKER         (also categorical)\n",
+    "REFRIGERATED_LOCKER    (also categorical)\n",
+    "\n",
+    "# COUNT\n",
+    "TOTAL_MEALS_ORDERED\n",
+    "UNIQUE_MEALS_PURCH\n",
+    "CONTACTS_W_CUSTOMER_SERVICE\n",
+    "PRODUCT_CATEGORIES_VIEWED\n",
+    "CANCELLATIONS_BEFORE_NOON\n",
+    "CANCELLATIONS_AFTER_NOON\n",
+    "MOBILE_LOGINS\n",
+    "PC_LOGINS\n",
+    "WEEKLY_PLAN\n",
+    "EARLY_DELIVERIES\n",
+    "LATE_DELIVERIES\n",
+    "MASTER_CLASSES_ATTENDED\n",
+    "TOTAL_PHOTOS_VIEWED\n",
+    "\n",
+    "# CATEGORICAL\n",
+    "CROSS_SELL_SUCCESS     (also binary)\n",
+    "MOBILE_NUMBER          (also binary)\n",
+    "TASTES_AND_PREFERENCES (also binary)\n",
+    "PACKAGE_LOCKER         (also binary)\n",
+    "REFRIGERATED_LOCKER    (also binary)\n",
+    "\n",
+    "# DISCRETE\n",
+    "NAME\n",
+    "EMAIL\n",
+    "FIRST_NAME\n",
+    "FAMILY_NAME\n",
+    "\n",
+    "\"\"\"\n",
+    "categorical = ['CROSS_SELL_SUCCESS',\n",
+    "               'MOBILE_NUMBER',\n",
+    "               'TASTES_AND_PREFERENCES',\n",
+    "               'PACKAGE_LOCKER',\n",
+    "               'REFRIGERATED_LOCKER']\n",
+    "\n",
+    "continuous = ['REVENUE',\n",
+    "              'AVG_TIME_PER_SITE_VISIT',\n",
+    "              'FOLLOWED_RECOMMENDATIONS_PCT',\n",
+    "              'AVG_PREP_VID_TIME',\n",
+    "              'LARGEST_ORDER_SIZE',\n",
+    "              'MEDIAN_MEAL_RATING',\n",
+    "              'AVG_CLICKS_PER_VISIT']\n",
+    "\n",
+    "counts = ['TOTAL_MEALS_ORDERED',\n",
+    "          'UNIQUE_MEALS_PURCH',\n",
+    "          'CONTACTS_W_CUSTOMER_SERVICE',\n",
+    "          'PRODUCT_CATEGORIES_VIEWED',\n",
+    "          'CANCELLATIONS_BEFORE_NOON',\n",
+    "          'CANCELLATIONS_AFTER_NOON',\n",
+    "          'MOBILE_LOGINS',\n",
+    "          'PC_LOGINS',\n",
+    "          'WEEKLY_PLAN',\n",
+    "          'EARLY_DELIVERIES',\n",
+    "          'LATE_DELIVERIES',\n",
+    "          'MASTER_CLASSES_ATTENDED',\n",
+    "          'TOTAL_PHOTOS_VIEWED']"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### A) Missing Value Analysis and Imputation\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Step 2: </strong> Further investigating missing values"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Inspecting missing values\n",
+    "#chef_org.isnull().sum()\n",
+    "#chef_org.loc[:,:][chef_org['FAMILY_NAME'].isna()]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong>Observations: </strong>\n",
+    "- Customers that have NA family name have parenthesis in names\n",
+    "- Parenthesis seem to indicate either their role or their geographical location\n",
+    "- Emails take the same format for last name \n",
+    "<br><br>\n",
+    "\n",
+    "<strong> Conclusion: </strong> not enough information to impute last name, leave as NA and flag where they are since last name is a discrete variable that most probably will not bring insights to the purpose of this analysis."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# Flagging missing variables for FAMILY_NAME\n",
+    "# creating a copy of dataframe for safety measures\n",
+    "chef_m = chef_org.copy()\n",
+    "\n",
+    "# creating a new column where 1 indicates that observation has a missing family name\n",
+    "chef_m['m_FAMILY_NAME'] = chef_m['FAMILY_NAME'].isnull().astype(int)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### B) Categorical Variables - Sample Size Check\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Step 3: </strong> Checking for sample size for each of categorical/ binary variables. We need to see if the size of each of the categories is large enough to infer statistical significance or insignificance. If not, the variable could be insignificant to predict revenue when in reality its sample size is too small."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CROSS_SELL_SUCCESS\n",
+      "------\n",
+      "1    1321\n",
+      "0     625\n",
+      "Name: CROSS_SELL_SUCCESS, dtype: int64\n",
+      "          \n",
+      "    \n",
+      "MOBILE_NUMBER\n",
+      "------\n",
+      "1    1708\n",
+      "0     238\n",
+      "Name: MOBILE_NUMBER, dtype: int64\n",
+      "          \n",
+      "    \n",
+      "TASTES_AND_PREFERENCES\n",
+      "------\n",
+      "1    1390\n",
+      "0     556\n",
+      "Name: TASTES_AND_PREFERENCES, dtype: int64\n",
+      "          \n",
+      "    \n",
+      "PACKAGE_LOCKER\n",
+      "------\n",
+      "0    1255\n",
+      "1     691\n",
+      "Name: PACKAGE_LOCKER, dtype: int64\n",
+      "          \n",
+      "    \n",
+      "REFRIGERATED_LOCKER\n",
+      "------\n",
+      "0    1726\n",
+      "1     220\n",
+      "Name: REFRIGERATED_LOCKER, dtype: int64\n",
+      "          \n",
+      "    \n"
+     ]
+    }
+   ],
+   "source": [
+    "for variable in chef_org:\n",
+    "    if variable in categorical:\n",
+    "        print(f\"\"\"{variable}\n",
+    "------\n",
+    "{chef_org[variable].value_counts()}\n",
+    "          \n",
+    "    \"\"\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong>\n",
+    "- Sample size for each option in all categorical variables are large enough for analysis (all contain above 200 observations)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### C) Categorical Variables: Email Domains"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Purpose </strong>: email domains from clients can provide insight on which customers are more likely to open any email communications. For example, if the email used for subscription is a \"junk\" email, chances are this customer might look at the inbox as often as we would like, as opposed to a professional email address where the customer might be looking at it multiple times a day. This can lead to an affect in revenue since clients might order a meal through an advertisement or a discount. <br>\n",
+    "<br> This steps first selects the email domain for each customer, then creates a new categorical variable where each domain is classified as \"personal\", \"professional\" or \"junk\". Finally, we will be one-hot encoding this new variable which will create three new columns for each email category. In these new columns, if an email corresponds to the column, that observation will take on the value 1."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# STEP 1: splitting emails\n",
+    "# placeholder list\n",
+    "placeholder_lst = []\n",
+    "\n",
+    "# looping over each email address\n",
+    "for index, col in chef_org.iterrows():\n",
+    "    \n",
+    "    # splitting email domain at '@'\n",
+    "    split_email = chef_m.loc[index, 'EMAIL'].split(sep = '@')\n",
+    "\n",
+    "    # appending placeholder_lst with the results\n",
+    "    placeholder_lst.append(split_email)\n",
+    "    \n",
+    "# converting placeholder_lst into a DataFrame\n",
+    "email_df = pd.DataFrame(placeholder_lst)\n",
+    "\n",
+    "# STEP 2: concatenating with original DataFrame\n",
+    "# Creating a copy of chef for features and safety measure\n",
+    "chef = chef_m.copy()\n",
+    "\n",
+    "# renaming column to concatenate\n",
+    "email_df.columns = ['name' , 'EMAIL_DOMAIN'] \n",
+    "\n",
+    "# concatenating personal_email_domain with chef DataFrame\n",
+    "chef = pd.concat([chef, email_df.loc[:, 'EMAIL_DOMAIN']], \n",
+    "                   axis = 1)\n",
+    "\n",
+    "# printing value counts of personal_email_domain\n",
+    "chef.loc[: ,'EMAIL_DOMAIN'].value_counts()\n",
+    "\n",
+    "# email domain types\n",
+    "professional_email_domains = ['@mmm.com',         '@amex.com',\n",
+    "                              '@apple.com',       '@boeing.com',\n",
+    "                              '@caterpillar.com', '@chevron.com',\n",
+    "                              '@cisco.com',       '@cocacola.com',\n",
+    "                              '@disney.com',      '@dupont.com',\n",
+    "                              '@exxon.com',       '@ge.org',\n",
+    "                              '@goldmansacs.com', '@homedepot.com',\n",
+    "                              '@ibm.com',         '@intel.com',\n",
+    "                              '@jnj.com',         '@jpmorgan.com',\n",
+    "                              '@mcdonalds.com',   '@merck.com',\n",
+    "                              '@microsoft.com',   '@nike.com',\n",
+    "                              '@pfizer.com',      '@pg.com',\n",
+    "                              '@travelers.com',   '@unitedtech.com',\n",
+    "                              '@unitedhealth.com','@verizon.com',\n",
+    "                              '@visa.com',        '@walmart.com']\n",
+    "personal_email_domains     = ['@gmail.com',       '@yahoo.com',    \n",
+    "                              '@protonmail.com']\n",
+    "junk_email_domains         = ['@me.com',          '@aol.com',\n",
+    "                              '@hotmail.com',     '@live.com', \n",
+    "                              '@msn.com',         '@passport.com']\n",
+    "\n",
+    "# placeholder list\n",
+    "placeholder_lst = []  \n",
+    "\n",
+    "\n",
+    "# looping to group observations by domain type\n",
+    "for domain in chef['EMAIL_DOMAIN']:\n",
+    "        if \"@\" + domain in professional_email_domains:\n",
+    "            placeholder_lst.append('professional')\n",
+    "            \n",
+    "        elif \"@\" + domain in personal_email_domains:\n",
+    "            placeholder_lst.append('personal')\n",
+    "            \n",
+    "        elif \"@\" + domain in junk_email_domains:\n",
+    "            placeholder_lst.append('junk')\n",
+    "            \n",
+    "        else:\n",
+    "            print('Unknown')\n",
+    "\n",
+    "\n",
+    "# concatenating with original DataFrame\n",
+    "chef['email_domain_group'] = pd.Series(placeholder_lst)\n",
+    "\n",
+    "# checking results and sample size\n",
+    "#print(chef['email_domain_group'].value_counts())\n",
+    "\n",
+    "# Step 3: One-Hot encoding\n",
+    "one_hot_email_domain = pd.get_dummies(chef['email_domain_group'])\n",
+    "\n",
+    "# dropping orginal columns to keep only encoded ones\n",
+    "chef_1               = chef.drop(['email_domain_group','EMAIL','EMAIL_DOMAIN'], axis = 1)\n",
+    "\n",
+    "# joining encoded columns to dataset\n",
+    "chef_1               = chef_1.join(one_hot_email_domain)\n",
+    "\n",
+    "# including new categorical variables to list\n",
+    "domains              = ['professional','personal','junk']\n",
+    "categorical          = categorical + domains\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### D) Continuous Variables: Outliers Detection"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Purpose: </strong> Outliers affect most predictive models. It increases variance in a variable, and therefore need to be flagged for two main reasons: <br> <br>\n",
+    "1) Using outlier flag variable in our model quantifies the affect of that outlier on the variable we are trying to predict (in this case, revenue) <br>\n",
+    "2) In some cases, removing outliers can improve our predictions and increase generalization of our model <br> <br>\n",
+    "\n",
+    "<nbsp> <nbsp> <nbsp> <nbsp>  In the following code, we visualize each variable's distribution with an user-defined function and we look at the quartile ranges using descriptive statistics. We then set thresholds which will determine which observations are going to be considered as outliers in this analysis. Finally, we create a new column for each of the variables that contain outliers, where a 1 will be imputed for outlier observations. <br><br>\n",
+    "<i> Note: no outliers are removed in the part of the analysis <i> <br><br>"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Visualizing continuous variable distributions\n",
+    "#for variable in continuous:\n",
+    "#    continuous_distributions(variable, chef_org, bins = 'fd', kde = True, rug = False)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "#chef_org[continuous].describe()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations:</strong>\n",
+    "- Revenue:\n",
+    "    - big dip in clients with revenue at approx 2,000 \n",
+    "\n",
+    "- Avg Time per Site Visit (in seconds):\n",
+    "    - almost a normal distribution\n",
+    "    - outliers after 200 (3.3 min)\n",
+    "    \n",
+    "- Followed Recommendations Percentage:\n",
+    "    - outliers after 80%\n",
+    "    \n",
+    "- Average Preparation Video Time (in seconds):\n",
+    "    - almost a normal distribution\n",
+    "    - outliers after 250 (approx 4 min)\n",
+    "    \n",
+    "- Largest Order Size:\n",
+    "    - almost normal distribution \n",
+    "    - after 5: a family is usually 4 - 5 people, more than that it could be that these customers are throwing dinner parties or keeping the meals for the next day\n",
+    "\n",
+    "- Median Meal Rating:\n",
+    "    - peak on 3\n",
+    "    - no obvious outliers\n",
+    "\n",
+    "- Average Clicks per visit:\n",
+    "    - outliers before 10\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "## Visualizing count variable distributions\n",
+    "#for variable in counts:\n",
+    "#    continuous_distributions(variable, chef_org, bins = 'auto',kde = False, rug = False)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong>\n",
+    "\n",
+    "- Total Meals Ordered:\n",
+    "    - strong dip in around 25 - investigate\n",
+    "    - outliers after 320\n",
+    "    \n",
+    "- Unique Meals Purchased:\n",
+    "    - outliers after 10\n",
+    "    \n",
+    "- Contacts with customer service:\n",
+    "    - outliers after 13\n",
+    "    \n",
+    "- Product Categories Viewed:\n",
+    "    - no obvious outliers\n",
+    "    \n",
+    "- Cancellations Before Noon:\n",
+    "    - approx exponential distribution\n",
+    "    - outliers after 8\n",
+    "   \n",
+    "- Cancellations After Noon:\n",
+    "    - no obvious outliers\n",
+    "    \n",
+    "- Mobile Log-ins:\n",
+    "    - no obvious outliers\n",
+    "    \n",
+    "- PC Log-ins:\n",
+    "   - no obvious outliers\n",
+    "\n",
+    "- Weekly Plan:\n",
+    "    - no obvious outliers\n",
+    "\n",
+    "- Early Deliveries:\n",
+    "    - peak on 0\n",
+    "    - no obvious outliers\n",
+    "\n",
+    "- Late Deliveries:\n",
+    "    - outliers after 17\n",
+    "    \n",
+    "- Master Class Attended:\n",
+    "    - no obvious outliers\n",
+    "    \n",
+    "- Total Photos Viewed:\n",
+    "    - peak on 0\n",
+    "    - outliers after 800\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Establishing outliers thresholds for analysis\n",
+    "# Continous\n",
+    "avg_time_per_site_visit_hi = 200\n",
+    "avg_prep_vid_time_hi       = 250\n",
+    "followed_rec_hi            = 80\n",
+    "largest_order_size_hi      = 5\n",
+    "avg_clicks_per_visit_lo    = 10\n",
+    "\n",
+    "\n",
+    "\n",
+    "# Counts:\n",
+    "total_meals_ordered_hi            = 320\n",
+    "unique_meals_purchased_hi         = 10\n",
+    "contacts_with_customer_service_hi = 13\n",
+    "cancellations_before_noon_hi      = 8\n",
+    "late_deliveries_hi                = 17\n",
+    "total_photos_viewed_hi            = 800\n",
+    "\n",
+    "# Target Variable\n",
+    "revenue_hi  =  5500\n",
+    "\n",
+    "\n",
+    "# Creating Dictionary to link variables with outlier thresholds\n",
+    "lst_thresholds_hi = {\n",
+    "    'AVG_TIME_PER_SITE_VISIT'      : avg_time_per_site_visit_hi,\n",
+    "    'AVG_PREP_VID_TIME'            : avg_prep_vid_time_hi,\n",
+    "    'TOTAL_MEALS_ORDERED'          : total_meals_ordered_hi,\n",
+    "    'UNIQUE_MEALS_PURCH'           : unique_meals_purchased_hi,\n",
+    "    'CONTACTS_W_CUSTOMER_SERVICE'  : contacts_with_customer_service_hi,\n",
+    "    'CANCELLATIONS_BEFORE_NOON'    : cancellations_before_noon_hi,\n",
+    "    'LATE_DELIVERIES'              : late_deliveries_hi,\n",
+    "    'TOTAL_PHOTOS_VIEWED'          : total_photos_viewed_hi,\n",
+    "    'REVENUE'                      : revenue_hi,\n",
+    "    'FOLLOWED_RECOMMENDATIONS_PCT' : followed_rec_hi,\n",
+    "    'LARGEST_ORDER_SIZE'           : largest_order_size_hi\n",
+    "    }\n",
+    "\n",
+    "lst_thresholds_lo = {\n",
+    "     'AVG_CLICKS_PER_VISIT'         : avg_clicks_per_visit_lo\n",
+    "     }"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Looping over variables to create outlier flags:\n",
+    "for key in lst_thresholds_hi.keys():\n",
+    "    outlier_flag_hi(key,lst_thresholds_hi[key],chef_1)\n",
+    "    \n",
+    "for key in lst_thresholds_lo.keys():\n",
+    "    outlier_flag_lo(key,lst_thresholds_lo[key],chef_1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### E) Continuous/ Count Variables: Trend-Based Features"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Purpose: </strong> Changes in variables behaviors in relation to our target variable can provide powerful explanations in our model as to how our revenue might be afftected. <br> \n",
+    "\n",
+    "<nbsp> <nbsp> <nbsp> <nbsp>  In the following code, we visualize each variable's relationship with revenue with an user-defined function. We then set thresholds which will determine which observations are going to be considered having a differing effect on our revenue. Finally, we create a new feature for each of the variables that contain this difference, where a 1 will be imputed for these observations. <br><br>\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Defining dependent variables for trend analysis\n",
+    "dependent_vars = [\n",
+    "    'AVG_TIME_PER_SITE_VISIT',     'FOLLOWED_RECOMMENDATIONS_PCT',\n",
+    "    'AVG_PREP_VID_TIME',           'LARGEST_ORDER_SIZE',\n",
+    "    'MEDIAN_MEAL_RATING',          'AVG_CLICKS_PER_VISIT',\n",
+    "    'TOTAL_MEALS_ORDERED',         'UNIQUE_MEALS_PURCH',\n",
+    "    'CONTACTS_W_CUSTOMER_SERVICE', 'PRODUCT_CATEGORIES_VIEWED',\n",
+    "    'CANCELLATIONS_BEFORE_NOON',   'CANCELLATIONS_AFTER_NOON',\n",
+    "    'MOBILE_LOGINS',               'PC_LOGINS',\n",
+    "    'WEEKLY_PLAN',                 'EARLY_DELIVERIES',\n",
+    "    'LATE_DELIVERIES',             'MASTER_CLASSES_ATTENDED',\n",
+    "    'TOTAL_PHOTOS_VIEWED'\n",
+    "    ]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# Visualizing dependent variable scatter plots in relation to Revenue\n",
+    "#for variable in dependent_vars:\n",
+    "#    scatterplots(independ_var = variable, target_var = 'REVENUE', data = chef_org, color = 'r')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "Observations:\n",
+    "- AVG_TIME_PER_SITE_VISIT\n",
+    "    - different at 50 seconds\n",
+    "    - 50 seconds to 200 seconds: no trend changes\n",
+    "    - data scatter after 200\n",
+    "    - outlier at 1600\n",
+    "- FOLLOWED_RECOMMENDATIONS_PCT\n",
+    "    - more dispersed after 70 percent\n",
+    "- AVG_PREP_VID_TIME\n",
+    "    - more variance after 150s (how to flag this?)\n",
+    "    - less variance after 210s\n",
+    "    - after 300 less data points\n",
+    "- LARGEST_ORDER_SIZE\n",
+    "    - increase in revenue until 5\n",
+    "    - decrease but less steep after 5\n",
+    "- MEDIAN_MEAL_RATING\n",
+    "    - inflated at 3 and 4\n",
+    "\t   - decrease after 4\n",
+    "- AVG_CLICKS_PER_VISIT\n",
+    "    - less than 8 very few data points\n",
+    "\t  -  increase in revenue until 10 clicks\n",
+    "    - decrease after 10 until 15\n",
+    "    - 16 to max constant\n",
+    "- TOTAL_MEALS_ORDERED\n",
+    "    - heteroskedasticity\n",
+    "    - at 15 inflated\n",
+    "    - increase at 100 \n",
+    "    - slower increase after 100    \n",
+    "- UNIQUE_MEALS_PURCH\n",
+    "    - inflated at 1: people must be ordering the same thing all the time\n",
+    "    - until 9 - constant\n",
+    "    - after 10 - outliers\n",
+    "- CONTACTS_W_CUSTOMER_SERVICE\n",
+    "    - until 10: revenue increases\n",
+    "    - after 10: revenue decreases\n",
+    "- PRODUCT_CATEGORIES_VIEWED\n",
+    "    - until 5 slow decrease\n",
+    "    - after 5 more constant\n",
+    "- CANCELLATIONS_BEFORE_NOON\n",
+    "    - after 8\n",
+    "- CANCELLATIONS_AFTER_NOON\n",
+    "    - zero inflated\n",
+    "    - at 3 - few observations with big revenue variance\n",
+    "- MOBILE_LOGINS\n",
+    "    - 0 and 1 are increase\n",
+    "    - 2 and 3 decrease\n",
+    "- PC_LOGINS\n",
+    "    - 4 to 6 increase\n",
+    "    - 7 decrease\n",
+    "- WEEKLY_PLAN\n",
+    "    - after 15 seems to be a decrease\n",
+    "    - constant after that\n",
+    "- EARLY_DELIVERIES\n",
+    "    - no obvious trend changes (does not seem to be a problem)\n",
+    "- LATE_DELIVERIES\n",
+    "    - decrease until 8\n",
+    "- MASTER_CLASSES_ATTENDED\n",
+    "    - at 1\n",
+    "    - at 2: less\n",
+    "- TOTAL_PHOTOS_VIEWED\n",
+    "    - 0 inflated"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Establishing outliers thresholds for analysis\n",
+    "# data scatters above this point\n",
+    "AVG_TIME_PER_SITE_VISIT_change_hi      = 200\n",
+    "FOLLOWED_RECOMMENDATIONS_PCT_change_hi = 70\n",
+    "AVG_PREP_VID_TIME_change_lo            = 150\n",
+    "AVG_PREP_VID_TIME_change_hi            = 210\n",
+    "TOTAL_MEALS_ORDERED_change_hi          = 100\n",
+    "\n",
+    "# trend changes\n",
+    "LARGEST_ORDER_SIZE_change_hi          = 5\n",
+    "AVG_CLICKS_PER_VISIT_change_lo        = 8\n",
+    "AVG_CLICKS_PER_VISIT_change_hi        = 16\n",
+    "UNIQUE_MEALS_PURCH_change_hi          = 9\n",
+    "CONTACTS_W_CUSTOMER_SERVICE_change_hi = 10\n",
+    "PRODUCT_CATEGORIES_VIEWED_change_hi   = 5\n",
+    "CANCELLATIONS_BEFORE_NOON_change_hi   = 8\n",
+    "MOBILE_LOGINS_change_hi               = 1\n",
+    "PC_LOGINS_change_hi                   = 6\n",
+    "WEEKLY_PLAN_change_hi                 = 15\n",
+    "LATE_DELIVERIES_change_lo             = 8\n",
+    "TOTAL_MEALS_ORDERED_change_hi         = 100\n",
+    "\n",
+    "\n",
+    "# Different at __ \n",
+    "AVG_TIME_PER_SITE_VISIT_change_at  = 50\n",
+    "MEDIAN_MEAL_RATING_change_at1      = 3\n",
+    "MEDIAN_MEAL_RATING_change_at2      = 4\n",
+    "MEDIAN_MEAL_RATING_change_at3      = 5\n",
+    "TOTAL_MEALS_ORDERED_change_at      = 15\n",
+    "UNIQUE_MEALS_PURCH_change_at       = 1\n",
+    "CANCELLATIONS_AFTER_NOON_change_at = 0\n",
+    "MASTER_CLASSES_ATTENDED_change_at1  = 1\n",
+    "MASTER_CLASSES_ATTENDED_change_at2  = 2\n",
+    "\n",
+    "\n",
+    "# Zero Inflated\n",
+    "TOTAL_PHOTOS_VIEWED_change_at = 0 \n",
+    "\n",
+    "\n",
+    "# Creating Dictionary to link variables with trend thresholds\n",
+    "high_thresholds = {\n",
+    "    'AVG_TIME_PER_SITE_VISIT'        : [AVG_TIME_PER_SITE_VISIT_change_hi],\n",
+    "    'FOLLOWED_RECOMMENDATIONS_PCT'   : [FOLLOWED_RECOMMENDATIONS_PCT_change_hi],\n",
+    "    'AVG_PREP_VID_TIME'              : [AVG_PREP_VID_TIME_change_hi,\n",
+    "                                        AVG_PREP_VID_TIME_change_lo],\n",
+    "    'TOTAL_MEALS_ORDERED'            : [TOTAL_MEALS_ORDERED_change_hi],\n",
+    "    'LARGEST_ORDER_SIZE'             : [LARGEST_ORDER_SIZE_change_hi],\n",
+    "    'AVG_CLICKS_PER_VISIT'           : [AVG_CLICKS_PER_VISIT_change_lo, \n",
+    "                                        AVG_CLICKS_PER_VISIT_change_hi],\n",
+    "    'UNIQUE_MEALS_PURCH'             : [UNIQUE_MEALS_PURCH_change_hi],\n",
+    "    'CONTACTS_W_CUSTOMER_SERVICE'    : [CONTACTS_W_CUSTOMER_SERVICE_change_hi],\n",
+    "    'PRODUCT_CATEGORIES_VIEWED'      : [PRODUCT_CATEGORIES_VIEWED_change_hi],\n",
+    "    'CANCELLATIONS_BEFORE_NOON'      : [CANCELLATIONS_BEFORE_NOON_change_hi],\n",
+    "    'MOBILE_LOGINS'                  : [MOBILE_LOGINS_change_hi],\n",
+    "    'PC_LOGINS'                      : [PC_LOGINS_change_hi],\n",
+    "    'WEEKLY_PLAN'                    : [WEEKLY_PLAN_change_hi],\n",
+    "    'LATE_DELIVERIES'                : [LATE_DELIVERIES_change_lo],\n",
+    "    'TOTAL_MEALS_ORDERED'            : [TOTAL_MEALS_ORDERED_change_hi]\n",
+    "    }\n",
+    "                     \n",
+    "                     \n",
+    "at_thresholds = {\n",
+    "    'AVG_TIME_PER_SITE_VISIT'      : [AVG_TIME_PER_SITE_VISIT_change_at],\n",
+    "    'MEDIAN_MEAL_RATING'           : [MEDIAN_MEAL_RATING_change_at1, \n",
+    "                                       MEDIAN_MEAL_RATING_change_at2, \n",
+    "                                       MEDIAN_MEAL_RATING_change_at3],\n",
+    "    'UNIQUE_MEALS_PURCH'           : [UNIQUE_MEALS_PURCH_change_at],\n",
+    "    'CANCELLATIONS_BEFORE_NOON'    : [CANCELLATIONS_AFTER_NOON_change_at],\n",
+    "    'MASTER_CLASSES_ATTENDED'      : [MASTER_CLASSES_ATTENDED_change_at1,\n",
+    "                                       MASTER_CLASSES_ATTENDED_change_at2],\n",
+    "    'TOTAL_PHOTOS_VIEWED'          : [TOTAL_PHOTOS_VIEWED_change_at]\n",
+    "    }\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": false
+   },
+   "outputs": [],
+   "source": [
+    "# Looping over dataset to create trend based columns\n",
+    "for key, value in high_thresholds.items():\n",
+    "    i = 0\n",
+    "    for val in value:\n",
+    "        higher_change_flag(key, i, val, chef_1)\n",
+    "        i += 1\n",
+    "\n",
+    "for key, value in at_thresholds.items():\n",
+    "    i = 0\n",
+    "    for val in value:\n",
+    "        at_flag(key, i, val, chef_1)\n",
+    "        i += 1"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Dropping variables after feature engineering\n",
+    "## !! only run this cell once !! ##\n",
+    "clean_chef = chef_1.drop([\n",
+    "                          'CROSS_SELL_SUCCESS',\n",
+    "                          'NAME',\n",
+    "                          'FIRST_NAME',\n",
+    "                          'FAMILY_NAME',\n",
+    "                          'm_FAMILY_NAME'\n",
+    "                         ], axis = 1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "## Part II: Transformations"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Purpose: </strong> In preparation for modeling, it is important to prepare our dataset to the different modeling techniques by using transformation. <br> \n",
+    "- Explanatory variables: <strong> standardization </strong> is going to be applied to our dependent variables. This is important for models that use distance (variance) to predict the target variable, revenue. By standardizing, we ensure that all dependent variables are on the same scale and can be compared easily. \n",
+    "\n",
+    "- Target Variable: <strong> logarithmic </strong> is going to be applied to our independent variable. The distribution of revenue is skewed to the right. By treating this skewness with a log transformation, we normalize the magnitude of smaller and larger variables. In other words, lower revenues are expanded in our analysis and higher revenues are compressed. In addition, this transformation will decrease the effects of outliers which increases the application of any model to new unseen data.\n",
+    "<br>\n",
+    "<i> Note: log transformations require non-zero values </i><br><br>\n",
+    "sources: <br>\n",
+    "<a> https://towardsdatascience.com/feature-engineering-for-machine-learning-3a5e293a5114 <br>\n",
+    "<a> https://www.r-statistics.com/2013/05/log-transformations-for-skewed-and-wide-distributions-from-practical-data-science-with-r/ \n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "#Defining a function to standardize numerical variables in the dataset:\n",
+    "\n",
+    "def standard(num_df):\n",
+    "    \"\"\"\n",
+    "    This function standardizes a dataframe that contains variables which are either\n",
+    "    integers or floats.\n",
+    "    \n",
+    "    ------\n",
+    "    num_df : DataFrame, must contain only numerical variables\n",
+    "    \n",
+    "    \"\"\"\n",
+    "    # Isolating target variable from DF to be standardized\n",
+    "    #num_df = num_df.drop(target_variable, axis = 1)\n",
+    "    \n",
+    "    # INSTANTIATING a StandardScaler() object\n",
+    "    scaler = StandardScaler()\n",
+    "\n",
+    "    # FITTING the scaler with housing_data\n",
+    "    scaler.fit(num_df)\n",
+    "\n",
+    "    # TRANSFORMING our data after fit\n",
+    "    X_scaled = scaler.transform(num_df)\n",
+    "\n",
+    "    # converting scaled data into a DataFrame\n",
+    "    X_scaled_df = pd.DataFrame(X_scaled)\n",
+    "    \n",
+    "    # adding labels to the scaled DataFrame\n",
+    "    X_scaled_df.columns = num_df.columns\n",
+    "    \n",
+    "    # Re-attaching target variable to DataFrame\n",
+    "    #X_scaled_df = X_scaled_df.join(target_variable)\n",
+    "    \n",
+    "    # returning the standardized data frame into the global environment\n",
+    "    return X_scaled_df\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# Log Transformation\n",
+    "# creating a copy for safety measures\n",
+    "clean_chef = clean_chef.copy()\n",
+    "\n",
+    "#transforming only REVENUE column\n",
+    "clean_chef['rev_log'] = clean_chef['REVENUE'].transform(np.log)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# Standardization\n",
+    "# creating a copy for safety measures\n",
+    "clean_chef = clean_chef.copy()\n",
+    "\n",
+    "# dropping revenue from standardization\n",
+    "chef_x      = clean_chef.drop(['REVENUE','rev_log'], axis = 1)\n",
+    "#clean_chef.columns\n",
+    "chef_target = clean_chef.loc[:,['REVENUE','rev_log']]\n",
+    "\n",
+    "# standardizing with user defined function and joining target revenue\n",
+    "chef_std   = standard(chef_x).join(chef_target)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "## Part III: Modelling"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Purpose: </strong> Find a model that can predict a new customer's revenue."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Defining a dictionary with variables names for each different model test\n",
+    "\n",
+    "variables_dict = {\n",
+    "    \"Base\" : [ # will only work with chef_org\n",
+    "        'REVENUE', 'CROSS_SELL_SUCCESS', 'NAME', 'EMAIL', 'FIRST_NAME', \n",
+    "        'FAMILY_NAME', 'TOTAL_MEALS_ORDERED', 'UNIQUE_MEALS_PURCH', \n",
+    "        'CONTACTS_W_CUSTOMER_SERVICE', 'PRODUCT_CATEGORIES_VIEWED', \n",
+    "        'AVG_TIME_PER_SITE_VISIT', 'MOBILE_NUMBER', 'CANCELLATIONS_BEFORE_NOON',\n",
+    "        'CANCELLATIONS_AFTER_NOON', 'TASTES_AND_PREFERENCES', 'PC_LOGINS',\n",
+    "        'MOBILE_LOGINS', 'WEEKLY_PLAN', 'EARLY_DELIVERIES', 'LATE_DELIVERIES', \n",
+    "        'PACKAGE_LOCKER', 'REFRIGERATED_LOCKER', 'FOLLOWED_RECOMMENDATIONS_PCT',\n",
+    "        'AVG_PREP_VID_TIME', 'LARGEST_ORDER_SIZE', 'MASTER_CLASSES_ATTENDED',\n",
+    "        'MEDIAN_MEAL_RATING', 'AVG_CLICKS_PER_VISIT', 'TOTAL_PHOTOS_VIEWED'\n",
+    "    ],\n",
+    "    \"Full_Features\" : [\n",
+    "        'REVENUE', 'TOTAL_MEALS_ORDERED', 'UNIQUE_MEALS_PURCH', \n",
+    "        'CONTACTS_W_CUSTOMER_SERVICE', 'PRODUCT_CATEGORIES_VIEWED', \n",
+    "        'AVG_TIME_PER_SITE_VISIT', 'MOBILE_NUMBER', 'CANCELLATIONS_BEFORE_NOON',\n",
+    "        'CANCELLATIONS_AFTER_NOON', 'TASTES_AND_PREFERENCES', 'PC_LOGINS', \n",
+    "        'MOBILE_LOGINS', 'WEEKLY_PLAN', 'EARLY_DELIVERIES', 'LATE_DELIVERIES', \n",
+    "        'PACKAGE_LOCKER', 'REFRIGERATED_LOCKER', 'FOLLOWED_RECOMMENDATIONS_PCT',\n",
+    "        'AVG_PREP_VID_TIME', 'LARGEST_ORDER_SIZE', 'MASTER_CLASSES_ATTENDED', \n",
+    "        'MEDIAN_MEAL_RATING', 'AVG_CLICKS_PER_VISIT', 'TOTAL_PHOTOS_VIEWED', \n",
+    "        'junk', 'personal', 'professional', 'out_AVG_TIME_PER_SITE_VISIT', \n",
+    "        'out_AVG_PREP_VID_TIME', 'out_TOTAL_MEALS_ORDERED', 'out_UNIQUE_MEALS_PURCH', \n",
+    "        'out_CONTACTS_W_CUSTOMER_SERVICE', 'out_CANCELLATIONS_BEFORE_NOON', \n",
+    "        'out_LATE_DELIVERIES', 'out_TOTAL_PHOTOS_VIEWED', 'out_REVENUE', \n",
+    "        'out_FOLLOWED_RECOMMENDATIONS_PCT', 'out_LARGEST_ORDER_SIZE',\n",
+    "        'out_AVG_CLICKS_PER_VISIT', 'change_AVG_TIME_PER_SITE_VISIT_0',\n",
+    "        'change_FOLLOWED_RECOMMENDATIONS_PCT_0','change_AVG_PREP_VID_TIME_0',\n",
+    "        'change_AVG_PREP_VID_TIME_1', 'change_TOTAL_MEALS_ORDERED_0',\n",
+    "        'change_LARGEST_ORDER_SIZE_0', 'change_AVG_CLICKS_PER_VISIT_0',\n",
+    "        'change_AVG_CLICKS_PER_VISIT_1', 'change_UNIQUE_MEALS_PURCH_0', \n",
+    "        'change_CONTACTS_W_CUSTOMER_SERVICE_0', 'change_PRODUCT_CATEGORIES_VIEWED_0',\n",
+    "        'change_CANCELLATIONS_BEFORE_NOON_0', 'change_MOBILE_LOGINS_0',\n",
+    "        'change_PC_LOGINS_0', 'change_WEEKLY_PLAN_0', 'change_LATE_DELIVERIES_0', \n",
+    "        'change_MEDIAN_MEAL_RATING_0', 'change_MEDIAN_MEAL_RATING_1',\n",
+    "        'change_MEDIAN_MEAL_RATING_2', 'change_MASTER_CLASSES_ATTENDED_0',\n",
+    "        'change_MASTER_CLASSES_ATTENDED_1', 'change_TOTAL_PHOTOS_VIEWED_0'\n",
+    "    ],\n",
+    "    \"LinearReg Features\" : [\n",
+    "        'TOTAL_MEALS_ORDERED', 'CONTACTS_W_CUSTOMER_SERVICE', 'AVG_PREP_VID_TIME',\n",
+    "        'LARGEST_ORDER_SIZE', 'TOTAL_PHOTOS_VIEWED',\n",
+    "        'change_AVG_TIME_PER_SITE_VISIT_0',  \n",
+    "        'change_UNIQUE_MEALS_PURCH_0', 'change_CONTACTS_W_CUSTOMER_SERVICE_0',\n",
+    "        'change_MEDIAN_MEAL_RATING_1','change_MASTER_CLASSES_ATTENDED_0',\n",
+    "        'change_MASTER_CLASSES_ATTENDED_1'\n",
+    "    ],\n",
+    "    \"Log Revenue Features\" : [\n",
+    "        'REVENUE', 'TOTAL_MEALS_ORDERED', 'UNIQUE_MEALS_PURCH', \n",
+    "        'CONTACTS_W_CUSTOMER_SERVICE', 'PRODUCT_CATEGORIES_VIEWED', \n",
+    "        'AVG_TIME_PER_SITE_VISIT', 'MOBILE_NUMBER', 'CANCELLATIONS_BEFORE_NOON',\n",
+    "        'CANCELLATIONS_AFTER_NOON', 'TASTES_AND_PREFERENCES', 'PC_LOGINS', \n",
+    "        'MOBILE_LOGINS', 'WEEKLY_PLAN', 'EARLY_DELIVERIES', 'LATE_DELIVERIES', \n",
+    "        'PACKAGE_LOCKER', 'REFRIGERATED_LOCKER', 'FOLLOWED_RECOMMENDATIONS_PCT',\n",
+    "        'AVG_PREP_VID_TIME', 'LARGEST_ORDER_SIZE', 'MASTER_CLASSES_ATTENDED', \n",
+    "        'MEDIAN_MEAL_RATING', 'AVG_CLICKS_PER_VISIT', 'TOTAL_PHOTOS_VIEWED', \n",
+    "        'junk', 'personal', 'professional', 'out_AVG_TIME_PER_SITE_VISIT', \n",
+    "        'out_AVG_PREP_VID_TIME', 'out_TOTAL_MEALS_ORDERED', 'out_UNIQUE_MEALS_PURCH', \n",
+    "        'out_CONTACTS_W_CUSTOMER_SERVICE', 'out_CANCELLATIONS_BEFORE_NOON', \n",
+    "        'out_LATE_DELIVERIES', 'out_TOTAL_PHOTOS_VIEWED', 'out_REVENUE', \n",
+    "        'out_FOLLOWED_RECOMMENDATIONS_PCT', 'out_LARGEST_ORDER_SIZE',\n",
+    "        'out_AVG_CLICKS_PER_VISIT', 'change_AVG_TIME_PER_SITE_VISIT_0',\n",
+    "        'change_FOLLOWED_RECOMMENDATIONS_PCT_0','change_AVG_PREP_VID_TIME_0',\n",
+    "        'change_AVG_PREP_VID_TIME_1', 'change_TOTAL_MEALS_ORDERED_0',\n",
+    "        'change_LARGEST_ORDER_SIZE_0', 'change_AVG_CLICKS_PER_VISIT_0',\n",
+    "        'change_AVG_CLICKS_PER_VISIT_1', 'change_UNIQUE_MEALS_PURCH_0', \n",
+    "        'change_CONTACTS_W_CUSTOMER_SERVICE_0', 'change_PRODUCT_CATEGORIES_VIEWED_0',\n",
+    "        'change_CANCELLATIONS_BEFORE_NOON_0', 'change_MOBILE_LOGINS_0',\n",
+    "        'change_PC_LOGINS_0', 'change_WEEKLY_PLAN_0', 'change_LATE_DELIVERIES_0', \n",
+    "        'change_MEDIAN_MEAL_RATING_0', 'change_MEDIAN_MEAL_RATING_1',\n",
+    "        'change_MEDIAN_MEAL_RATING_2', 'change_MASTER_CLASSES_ATTENDED_0',\n",
+    "        'change_MASTER_CLASSES_ATTENDED_1', 'change_TOTAL_PHOTOS_VIEWED_0','rev_log'\n",
+    "    ],\n",
+    "    \"Lasso Features\" : [\n",
+    "        'REVENUE', 'TOTAL_MEALS_ORDERED', 'UNIQUE_MEALS_PURCH', \n",
+    "        'CONTACTS_W_CUSTOMER_SERVICE',  \n",
+    "        'AVG_TIME_PER_SITE_VISIT', 'CANCELLATIONS_BEFORE_NOON',\n",
+    "        'CANCELLATIONS_AFTER_NOON', 'PC_LOGINS', 'MOBILE_LOGINS',\n",
+    "        'EARLY_DELIVERIES', 'REFRIGERATED_LOCKER', 'AVG_PREP_VID_TIME', \n",
+    "        'LARGEST_ORDER_SIZE', \n",
+    "        'MEDIAN_MEAL_RATING', 'TOTAL_PHOTOS_VIEWED', 'junk',  \n",
+    "        'out_TOTAL_MEALS_ORDERED', 'out_UNIQUE_MEALS_PURCH', \n",
+    "        'out_CONTACTS_W_CUSTOMER_SERVICE','out_LATE_DELIVERIES', \n",
+    "        'out_TOTAL_PHOTOS_VIEWED', 'out_REVENUE', 'out_LARGEST_ORDER_SIZE',\n",
+    "        'out_AVG_CLICKS_PER_VISIT','change_AVG_PREP_VID_TIME_1', 'change_LARGEST_ORDER_SIZE_0', \n",
+    "        'change_UNIQUE_MEALS_PURCH_0', 'change_CONTACTS_W_CUSTOMER_SERVICE_0', \n",
+    "        'change_PRODUCT_CATEGORIES_VIEWED_0','change_CANCELLATIONS_BEFORE_NOON_0',\n",
+    "        'change_PC_LOGINS_0', 'change_WEEKLY_PLAN_0',\n",
+    "        'change_MEDIAN_MEAL_RATING_0', 'change_MEDIAN_MEAL_RATING_1',\n",
+    "        'change_MEDIAN_MEAL_RATING_2', 'change_MASTER_CLASSES_ATTENDED_0',\n",
+    "        'change_MASTER_CLASSES_ATTENDED_1', 'change_TOTAL_PHOTOS_VIEWED_0','rev_log'\n",
+    "    ],\n",
+    "    \"ARD Features\" : [\n",
+    "        'REVENUE', 'TOTAL_MEALS_ORDERED', 'CONTACTS_W_CUSTOMER_SERVICE', \n",
+    "        'AVG_PREP_VID_TIME', 'LARGEST_ORDER_SIZE',\n",
+    "        'MEDIAN_MEAL_RATING', 'out_TOTAL_MEALS_ORDERED', \n",
+    "        'out_CONTACTS_W_CUSTOMER_SERVICE', \n",
+    "        'change_AVG_PREP_VID_TIME_1', 'change_UNIQUE_MEALS_PURCH_0', \n",
+    "        'change_CONTACTS_W_CUSTOMER_SERVICE_0',  \n",
+    "        'change_MEDIAN_MEAL_RATING_0', 'change_MEDIAN_MEAL_RATING_1',\n",
+    "        'change_MASTER_CLASSES_ATTENDED_0','change_MASTER_CLASSES_ATTENDED_1', \n",
+    "        'change_TOTAL_PHOTOS_VIEWED_0','rev_log'\n",
+    "    ]\n",
+    "    \n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### A) Base Linear Model\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "We'll start with an multilinear model. We'll be using the statsmodel package to print out comprehensive summary to better understand our features and how they relate to REVENUE: <br> <br>\n",
+    "<strong> Step 1: </strong> Correlation between dependent variables and independent variable <br>\n",
+    "<strong> Step 2: </strong> OLS model with original features <br>\n",
+    "<strong> Step 3: </strong> OLS model with original and engineered features <br> \n",
+    "<strong> Step 4: </strong> OLS model with fitted variables (only significant variables) <br><br>"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# creating a (Pearson) correlation matrix\n",
+    "df_corr = clean_chef.corr().round(2)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Creating a DataFrame with only Original Features (Base Model)\n",
+    "chef_org_explanatory = chef_org[variables_dict['Base']]\n",
+    "\n",
+    "# dropping Revenue and Discrete variables from the explanatory variable set\n",
+    "chef_org_explanatory = chef_org_explanatory.drop(['REVENUE','NAME','FIRST_NAME','FAMILY_NAME', 'EMAIL'], axis = 1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Building a full OLS model with all original features\n",
+    "lm_full = smf.ols(formula = \"\"\" chef_org['REVENUE'] ~\n",
+    "                            chef_org['CROSS_SELL_SUCCESS'] +\n",
+    "                            chef_org['TOTAL_MEALS_ORDERED'] +\n",
+    "                            chef_org['UNIQUE_MEALS_PURCH'] +\n",
+    "                            chef_org['CONTACTS_W_CUSTOMER_SERVICE'] +\n",
+    "                            chef_org['PRODUCT_CATEGORIES_VIEWED'] +\n",
+    "                            chef_org['AVG_TIME_PER_SITE_VISIT'] +\n",
+    "                            chef_org['MOBILE_NUMBER'] +\n",
+    "                            chef_org['CANCELLATIONS_BEFORE_NOON'] +\n",
+    "                            chef_org['CANCELLATIONS_AFTER_NOON'] +\n",
+    "                            chef_org['TASTES_AND_PREFERENCES'] +\n",
+    "                            chef_org['PC_LOGINS'] +\n",
+    "                            chef_org['MOBILE_LOGINS'] +\n",
+    "                            chef_org['WEEKLY_PLAN'] +\n",
+    "                            chef_org['EARLY_DELIVERIES'] +\n",
+    "                            chef_org['LATE_DELIVERIES'] +\n",
+    "                            chef_org['PACKAGE_LOCKER'] +\n",
+    "                            chef_org['REFRIGERATED_LOCKER'] +\n",
+    "                            chef_org['FOLLOWED_RECOMMENDATIONS_PCT'] +\n",
+    "                            chef_org['AVG_PREP_VID_TIME'] +\n",
+    "                            chef_org['LARGEST_ORDER_SIZE'] +\n",
+    "                            chef_org['MASTER_CLASSES_ATTENDED'] +\n",
+    "                            chef_org['MEDIAN_MEAL_RATING'] +\n",
+    "                            chef_org['AVG_CLICKS_PER_VISIT'] +\n",
+    "                            chef_org['TOTAL_PHOTOS_VIEWED']\n",
+    "                            \"\"\",\n",
+    "                 data = chef_org)\n",
+    "\n",
+    "# telling Python to run the data through the blueprint\n",
+    "results_full = lm_full.fit()\n",
+    "\n",
+    "# printing the results\n",
+    "#print(results_full.summary2())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong> <br>\n",
+    "- F-statistic p-value is very low: model is explaining (to a certain degree) the REVENUE\n",
+    "- a lot of statistically insignificant variables that might be adding noise to our model\n",
+    "- significant variables: total meals ordered (+ 5.7), unique meal purchased (-63.7), contacts with customer service (+ 45.6), average prep video time (+ 9.3), largest order size (- 96), master classes attended (+ 175.2), median meal rating ( + 342.4), total photos viewed (+ 0.69).\n",
+    "- from these, it is not surprising to have total meals ordered and largest order size as revenue = quantity * price and these variables are directly related to quantity. However it is interesting to look at unique meals purchased having a negative relationship with revenue. This could indicate that customers for Apprentice Chef are most likely to be always ordering the same meals. --> for further investigation\n",
+    "- ! The condition number is large (6e+03). This might indicate strong multicollinearity or other numerical problems."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "### Creating a Feature Rich DataFrame (Full model)\n",
+    "chef_full_explanatory = clean_chef[variables_dict['Full_Features']]\n",
+    "\n",
+    "# dropping Revenue and Discrete variables from the explanatory variable set\n",
+    "chef_full_explanatory = chef_full_explanatory.drop(['REVENUE','out_REVENUE'], axis = 1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 27,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "## Building a full OLS model with created features\n",
+    "lm_full = smf.ols(formula = \"\"\" chef_org['REVENUE'] ~\n",
+    "                            clean_chef['TOTAL_MEALS_ORDERED'] +\n",
+    "                            clean_chef['UNIQUE_MEALS_PURCH'] +\n",
+    "                            clean_chef['CONTACTS_W_CUSTOMER_SERVICE'] +\n",
+    "                            clean_chef['PRODUCT_CATEGORIES_VIEWED'] +\n",
+    "                            clean_chef['AVG_TIME_PER_SITE_VISIT'] +\n",
+    "                            clean_chef['MOBILE_NUMBER'] +\n",
+    "                            clean_chef['CANCELLATIONS_BEFORE_NOON'] +\n",
+    "                            clean_chef['CANCELLATIONS_AFTER_NOON'] +\n",
+    "                            clean_chef['TASTES_AND_PREFERENCES'] +\n",
+    "                            clean_chef['PC_LOGINS'] +\n",
+    "                            clean_chef['MOBILE_LOGINS'] +\n",
+    "                            clean_chef['WEEKLY_PLAN'] +\n",
+    "                            clean_chef['EARLY_DELIVERIES'] +\n",
+    "                            clean_chef['LATE_DELIVERIES'] +\n",
+    "                            clean_chef['PACKAGE_LOCKER'] +\n",
+    "                            clean_chef['REFRIGERATED_LOCKER'] +\n",
+    "                            clean_chef['FOLLOWED_RECOMMENDATIONS_PCT'] +\n",
+    "                            clean_chef['AVG_PREP_VID_TIME'] +\n",
+    "                            clean_chef['LARGEST_ORDER_SIZE'] +\n",
+    "                            clean_chef['MASTER_CLASSES_ATTENDED'] +\n",
+    "                            clean_chef['MEDIAN_MEAL_RATING'] +\n",
+    "                            clean_chef['AVG_CLICKS_PER_VISIT'] +\n",
+    "                            clean_chef['TOTAL_PHOTOS_VIEWED'] +\n",
+    "                            clean_chef['junk'] +\n",
+    "                            clean_chef['personal'] +\n",
+    "                            clean_chef['professional'] +\n",
+    "                            clean_chef['out_AVG_TIME_PER_SITE_VISIT'] +\n",
+    "                            clean_chef['out_AVG_PREP_VID_TIME'] +\n",
+    "                            clean_chef['out_TOTAL_MEALS_ORDERED'] +\n",
+    "                            clean_chef['out_UNIQUE_MEALS_PURCH'] +\n",
+    "                            clean_chef['out_CONTACTS_W_CUSTOMER_SERVICE'] +\n",
+    "                            clean_chef['out_CANCELLATIONS_BEFORE_NOON'] +\n",
+    "                            clean_chef['out_LATE_DELIVERIES'] +\n",
+    "                            clean_chef['out_TOTAL_PHOTOS_VIEWED'] +\n",
+    "                            clean_chef['out_FOLLOWED_RECOMMENDATIONS_PCT'] +\n",
+    "                            clean_chef['out_LARGEST_ORDER_SIZE'] +\n",
+    "                            clean_chef['out_AVG_CLICKS_PER_VISIT'] +\n",
+    "                            clean_chef['change_AVG_TIME_PER_SITE_VISIT_0'] +\n",
+    "                            clean_chef['change_FOLLOWED_RECOMMENDATIONS_PCT_0'] +\n",
+    "                            clean_chef['change_AVG_PREP_VID_TIME_0'] +\n",
+    "                            clean_chef['change_AVG_PREP_VID_TIME_1'] +\n",
+    "                            clean_chef['change_TOTAL_MEALS_ORDERED_0'] +\n",
+    "                            clean_chef['change_LARGEST_ORDER_SIZE_0'] +\n",
+    "                            clean_chef['change_AVG_CLICKS_PER_VISIT_0'] +\n",
+    "                            clean_chef['change_AVG_CLICKS_PER_VISIT_1'] +\n",
+    "                            clean_chef['change_UNIQUE_MEALS_PURCH_0'] +\n",
+    "                            clean_chef['change_CONTACTS_W_CUSTOMER_SERVICE_0'] +\n",
+    "                            clean_chef['change_PRODUCT_CATEGORIES_VIEWED_0'] +\n",
+    "                            clean_chef['change_CANCELLATIONS_BEFORE_NOON_0'] +\n",
+    "                            clean_chef['change_MOBILE_LOGINS_0'] +\n",
+    "                            clean_chef['change_PC_LOGINS_0'] +\n",
+    "                            clean_chef['change_WEEKLY_PLAN_0'] +\n",
+    "                            clean_chef['change_LATE_DELIVERIES_0'] +\n",
+    "                            clean_chef['change_MEDIAN_MEAL_RATING_0'] +\n",
+    "                            clean_chef['change_MEDIAN_MEAL_RATING_1'] +\n",
+    "                            clean_chef['change_MEDIAN_MEAL_RATING_2'] +\n",
+    "                            clean_chef['change_MASTER_CLASSES_ATTENDED_0'] +\n",
+    "                            clean_chef['change_MASTER_CLASSES_ATTENDED_1'] +\n",
+    "                            clean_chef['change_TOTAL_PHOTOS_VIEWED_0']\n",
+    "                           \"\"\",\n",
+    "                 data = clean_chef)\n",
+    "\n",
+    "# telling Python to run the data through the blueprint\n",
+    "results_full = lm_full.fit()\n",
+    "\n",
+    "# printing the results\n",
+    "#print(results_full.summary2())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong>\n",
+    "- improved adjusted r-squared: features created help explain REVENUE better\n",
+    "- still a lot of insignificant features\n",
+    "- still possibility of multicollinearity"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 28,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "## Creating a DataFrame with only significant features\n",
+    "chef_fit = clean_chef[variables_dict['LinearReg Features']]\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 29,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": false
+   },
+   "outputs": [],
+   "source": [
+    "# Building a fit OLS model based on P-value from full model (alpha = 0.001)\n",
+    "\n",
+    "lm_fit = smf.ols(formula = \"\"\" chef_org['REVENUE'] ~\n",
+    "                            clean_chef['TOTAL_MEALS_ORDERED'] +\n",
+    "                            clean_chef['CONTACTS_W_CUSTOMER_SERVICE'] +\n",
+    "                            clean_chef['AVG_PREP_VID_TIME'] +\n",
+    "                            clean_chef['LARGEST_ORDER_SIZE'] +\n",
+    "                            clean_chef['TOTAL_PHOTOS_VIEWED'] +\n",
+    "                            clean_chef['change_AVG_TIME_PER_SITE_VISIT_0'] +\n",
+    "                            clean_chef['change_UNIQUE_MEALS_PURCH_0'] +\n",
+    "                            clean_chef['change_CONTACTS_W_CUSTOMER_SERVICE_0'] +\n",
+    "                            clean_chef['change_MEDIAN_MEAL_RATING_1'] +\n",
+    "                            clean_chef['change_MASTER_CLASSES_ATTENDED_0'] +\n",
+    "                            clean_chef['change_MASTER_CLASSES_ATTENDED_1']\n",
+    "                            \"\"\",\n",
+    "                 data = clean_chef) \n",
+    "\n",
+    "# telling Python to run the data through the blueprint\n",
+    "results_fit = lm_fit.fit()\n",
+    "\n",
+    "# printing the results\n",
+    "#print(results_fit.summary2())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong>\n",
+    "- skewness reduced\n",
+    "- adjusted r-squared reduced: normal since this is the first fitted model\n",
+    "- all variables are significant"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "### B) Feature Selection"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "In this section, we'll be utilizing different methods to improve our models predictive power by shedding a light on which features are important: <br> <br>\n",
+    "<strong> Method 1: </strong> L1 Regularization or Lasso - useful for feature selection when we have too many variables\n",
+    "<br><br>"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 30,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "## Preparing the orginal data for SKLEARN models\n",
+    "# Creating a variable for random seed\n",
+    "seed = 222\n",
+    "\n",
+    "# Preparing response variable\n",
+    "chef_target = clean_chef['rev_log']\n",
+    "\n",
+    "\n",
+    "### Non-transformed Data ###\n",
+    "# Preparing x-variables\n",
+    "## use dictionary keys for different sets of features (might need to drop different columns)\n",
+    "chef_x = clean_chef[variables_dict['ARD Features']].drop(['REVENUE','rev_log'], axis = 1)# 'out_REVENUE',\n",
+    "\n",
+    "# Running train/test split\n",
+    "X_train, X_test, y_train, y_test = train_test_split(\n",
+    "            chef_x,\n",
+    "            chef_target,\n",
+    "            test_size = 0.25,\n",
+    "            random_state = seed)\n",
+    "\n",
+    "### Transformed Data #### \n",
+    "# Preparing x-variables\n",
+    "chef_std_x = chef_std[variables_dict['ARD Features']].drop(['REVENUE','rev_log'], axis = 1) #'out_REVENUE',\n",
+    "\n",
+    "# Running train/test split\n",
+    "X_train_s, X_test_s, y_train_s, y_test_s = train_test_split(\n",
+    "            chef_std_x,\n",
+    "            chef_target,\n",
+    "            test_size = 0.25,\n",
+    "            random_state = seed)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<br>\n",
+    "\n",
+    "***\n",
+    "<br>\n",
+    "Let's first run a linear regression model on sklearn to evaluate how our features test on new data:\n",
+    "<br>"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 31,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Training Score: 0.8259\n",
+      "Testing Score: 0.7832\n"
+     ]
+    }
+   ],
+   "source": [
+    "# applying modeling with scikit-learn\n",
+    "# INSTANTIATING a model object\n",
+    "lr = LinearRegression()\n",
+    "\n",
+    "\n",
+    "# FITTING to the training data\n",
+    "lr_fit = lr.fit(X_train, y_train) \n",
+    "\n",
+    "\n",
+    "# PREDICTING on new data\n",
+    "lr_pred = lr_fit.predict(X_test) \n",
+    "\n",
+    "# SCORING the results\n",
+    "print('Training Score:', lr.score(X_train, y_train).round(4)) \n",
+    "print('Testing Score:',  lr.score(X_test, y_test).round(4))   \n",
+    "\n",
+    "# saving results for later:\n",
+    "lr_train_score = lr.score(X_train, y_train).round(4) \n",
+    "lr_test_score  = lr.score(X_test, y_test).round(4)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<br>\n",
+    "\n",
+    "***\n",
+    "<br>\n",
+    "Now let's run our first regularization model on sklearn: Lasso (L1 Regularization). The goal is to evaluate which features are important to our target variable. The model uses a penalty function to decrease a feature's coefficient each time it runs, thus making insignificant coefficients equal to zero by the end. <br><br>\n",
+    "Its parameters specified below are alpha (regularization parameter, when equal to one - simple linear regression, as it reduces, we further filter our features by penalizing them) and normalize (which here is set to false since we are using normalized data on it). It is important to use standardized data with this method to reduce \n",
+    "\n",
+    "<br>\n",
+    "We then look at the coefficients for each of the variables to identify features that are important. \n",
+    "<br><br>\n",
+    "sources: <br>\n",
+    "<a> https://towardsdatascience.com/l1-and-l2-regularization-methods-ce25e7fc831c <br>\n",
+    "<a> https://towardsdatascience.com/ridge-and-lasso-regression-a-complete-guide-with-python-scikit-learn-e20e34bcbf0b\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 33,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Training Score: 0.825\n",
+      "Testing Score: 0.7817\n"
+     ]
+    }
+   ],
+   "source": [
+    "# INSTANTIATING a model object\n",
+    "lasso_model = sklearn.linear_model.Lasso(alpha = 0.003, \n",
+    "                                         normalize = False) # using standardized data\n",
+    "\n",
+    "# FITTING the training data\n",
+    "lasso_fit = lasso_model.fit(X_train_s, y_train_s)\n",
+    "\n",
+    "\n",
+    "# PREDICTING on new data\n",
+    "lasso_pred = lasso_fit.predict(X_test_s)\n",
+    "\n",
+    "print('Training Score:', lasso_model.score(X_train_s, y_train_s).round(4))\n",
+    "print('Testing Score:',  lasso_model.score(X_test_s, y_test_s).round(4))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 34,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": false
+   },
+   "outputs": [],
+   "source": [
+    "# storing coefficients as df \n",
+    "lasso_model_coef = pd.DataFrame(lasso_model.coef_)\n",
+    "\n",
+    "# naming variables to coefficients\n",
+    "lasso_model_coef['Variable Names'] = chef_std_x.columns\n",
+    "\n",
+    "# Looking at insignificant coefficients\n",
+    "drop = lasso_model_coef.iloc[:,:][lasso_model_coef[0] == 0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 35,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Training Score: 0.8258\n",
+      "Testing Score: 0.7837\n"
+     ]
+    }
+   ],
+   "source": [
+    "# INSTANTIATING a model object\n",
+    "ard_model = sklearn.linear_model.ARDRegression(n_iter = 400, \n",
+    "                                               normalize = False) # using standardized data\n",
+    "\n",
+    "# FITTING the training data\n",
+    "ard_fit = ard_model.fit(X_train_s, y_train_s)\n",
+    "\n",
+    "\n",
+    "# PREDICTING on new data\n",
+    "ard_pred = ard_fit.predict(X_test_s)\n",
+    "\n",
+    "print('Training Score:', ard_model.score(X_train_s, y_train_s).round(4))\n",
+    "print('Testing Score:',  ard_model.score(X_test_s, y_test_s).round(4))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 36,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# storing coefficients as df \n",
+    "ard_model_coef = pd.DataFrame(ard_model.coef_)\n",
+    "ard_model_coef['Variable Names'] = chef_std_x.columns\n",
+    "\n",
+    "# Looking at insignificant coefficients\n",
+    "drop = ard_model_coef.iloc[:,:][ard_model_coef[0] == 0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 37,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "The optimal number of neighbors is 8\n",
+      "Training Score: 0.8499\n",
+      "Testing Score: 0.7849\n"
+     ]
+    }
+   ],
+   "source": [
+    "# creating lists for training set accuracy and test set accuracy\n",
+    "training_accuracy = []\n",
+    "test_accuracy = []\n",
+    "\n",
+    "\n",
+    "# building a visualization of 1 to 50 neighbors\n",
+    "neighbors_settings = range(1, 21)\n",
+    "\n",
+    "for n_neighbors in neighbors_settings:\n",
+    "    # Building the model\n",
+    "    clf = KNeighborsRegressor(n_neighbors = n_neighbors)\n",
+    "    clf.fit(X_train_s, y_train_s)\n",
+    "    \n",
+    "    # Recording the training set accuracy\n",
+    "    training_accuracy.append(clf.score(X_train_s, y_train_s))\n",
+    "    \n",
+    "    # Recording the generalization accuracy\n",
+    "    test_accuracy.append(clf.score(X_test_s, y_test_s))\n",
+    "\n",
+    "\n",
+    "# plotting the visualization\n",
+    "#fig, ax = plt.subplots(figsize=(12,8))\n",
+    "#plt.plot(neighbors_settings, training_accuracy, label = \"training accuracy\")\n",
+    "#plt.plot(neighbors_settings, test_accuracy, label = \"test accuracy\")\n",
+    "#plt.ylabel(\"Accuracy\")\n",
+    "#plt.xlabel(\"n_neighbors\")\n",
+    "#plt.legend()\n",
+    "#plt.show()\n",
+    "\n",
+    "# finding the optimal number of neighbors\n",
+    "opt_neighbors = test_accuracy.index(max(test_accuracy)) + 1\n",
+    "print(f\"\"\"The optimal number of neighbors is {opt_neighbors}\"\"\")\n",
+    "\n",
+    "# Model:\n",
+    "# INSTANTIATING a KNN model object\n",
+    "knn_reg = KNeighborsRegressor(algorithm = 'auto',\n",
+    "                              n_neighbors = opt_neighbors)\n",
+    "\n",
+    "# FITTING to the training data\n",
+    "knn_reg.fit(X_train_s, y_train_s)\n",
+    "\n",
+    "\n",
+    "# PREDICTING on new data\n",
+    "knn_reg_pred = knn_reg.predict(X_test_s)\n",
+    "\n",
+    "\n",
+    "# SCORING the results\n",
+    "print('Training Score:', knn_reg.score(X_train_s, y_train_s).round(4))\n",
+    "print('Testing Score:',  knn_reg.score(X_test_s, y_test_s).round(4))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<br> <strong> Observations: </strong>\n",
+    "- KNN model score is not higher than a Linear model with features selected by regularization methods\n",
+    "- KNN slightly overfits our model (difference of 0.065 between train and test scores)\n",
+    "\n",
+    "<strong> Conclusion: </strong>  Linear model provides a high score with features selected by regularization methods. Its interpretability will provide powerful business insights. However, we need to make sure we are meeting all the assumptions necessary of a linear model.\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "***"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "## Part IV: Evaluating Model - Linear Model Assumptions\n",
+    "1. Residual plots (is linear assumption valid? are outliers affecting our predictions?)\n",
+    "2.  Multicollinearity (highly correlated explanatory variables)\n",
+    "3.  Re - sampling methods (cross validation)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> 1. Residual Plot </strong>"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 38,
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 720x720 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# setting figure size\n",
+    "fig, ax = plt.subplots(figsize = (10, 10))\n",
+    "\n",
+    "\n",
+    "# developing a residual plot\n",
+    "sns.residplot(x = lr_pred,  # prediction values \n",
+    "              y = y_test)   # actual values \n",
+    "\n",
+    "# displaying the plot\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations:</strong>\n",
+    "- no obvious patterns: homoskedasticity assumption met, linear relationship met\n",
+    "- Caution: very big outlier could be affecting our prediction\n",
+    "\n",
+    "<br>\n",
+    "sources: <br>\n",
+    "<a> https://data.library.virginia.edu/interpreting-log-transformations-in-a-linear-model/ <br>\n",
+    "<a> http://docs.statwing.com/interpreting-residual-plots-to-improve-your-regression/\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "***"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> 2. Evaluating Outlier Affect on Model </strong>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "Variables in our model with outliers:\n",
+    "- Total meals ordered\n",
+    "- Largest order size\n",
+    "- Contact with customer service\n",
+    "- Avg prep video time\n",
+    "- Largest order size"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "Important: Since we are removing outliers, it is important to check how many observations we are removing from our dataset."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 39,
+   "metadata": {
+    "deletable": false,
+    "editable": false,
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "(1946, 62)\n",
+      "(1939, 62)\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Creating a copy of dataset for safety measure\n",
+    "out_chef = clean_chef.copy()\n",
+    "\n",
+    "# Printing out size of dataframe with all data points\n",
+    "print(out_chef.shape)\n",
+    "\n",
+    "# Subsetting outliers from our linear model features by using flags\n",
+    "out_chef = out_chef.loc[:][out_chef['out_TOTAL_MEALS_ORDERED'] == 0]\n",
+    "                          \n",
+    "# Printing out size of dataframe after removing outliers\n",
+    "print(out_chef.shape)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "Removed only 7 observations that we outliers in Total Meals Ordered. Total meals ordered is a variable that has a direct relationship with revenue since Revenue = Quantity x Price and Total meals ordered for each customer corresponds to its quantity. Therefore, any outliers could be affecting our model's ability to generalize and predict new data."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 40,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Training Score: 0.807\n",
+      "Testing Score: 0.8279\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Re-running our linear model without outliers to compare test scores (previous = 0.7832)\n",
+    "\n",
+    "# Preparing response variable\n",
+    "out_chef_target = out_chef['rev_log']\n",
+    "\n",
+    "\n",
+    "### Non-transformed Data ###\n",
+    "# Preparing x-variables\n",
+    "out_chef_x = out_chef[variables_dict['ARD Features']].drop(['REVENUE','rev_log','out_TOTAL_MEALS_ORDERED'],\n",
+    "                                                           axis = 1)# 'out_REVENUE',\n",
+    "\n",
+    "# Running train/test split\n",
+    "X_train_out, X_test_out, y_train_out, y_test_out = train_test_split(\n",
+    "            out_chef_x,\n",
+    "            out_chef_target,\n",
+    "            test_size = 0.25,\n",
+    "            random_state = seed)\n",
+    "\n",
+    "\n",
+    "# applying modeling with scikit-learn\n",
+    "# INSTANTIATING a model object\n",
+    "out_lr = LinearRegression()\n",
+    "\n",
+    "\n",
+    "# FITTING to the training data\n",
+    "out_lr_fit = out_lr.fit(X_train_out, y_train_out) \n",
+    "\n",
+    "\n",
+    "# PREDICTING on new data\n",
+    "out_lr_pred = out_lr_fit.predict(X_test_out) \n",
+    "\n",
+    "# SCORING the results\n",
+    "print('Training Score:', out_lr.score(X_train_out, y_train_out).round(4)) \n",
+    "print('Testing Score:',  out_lr.score(X_test_out, y_test_out).round(4))   \n",
+    "\n",
+    "# saving results for later:\n",
+    "out_lr_train_score = out_lr.score(X_train_out, y_train_out).round(4) \n",
+    "out_lr_test_score  = out_lr.score(X_test_out, y_test_out).round(4)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 41,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Using StatsModels to print out summary of our best model \n",
+    "# merging X_train and y_train so that they can be used in statsmodels\n",
+    "chef_train = pd.concat([X_train_out, y_train_out], axis = 1)\n",
+    "\n",
+    "# Step 1: build a model\n",
+    "lm_best = smf.ols(formula =  \"\"\"rev_log ~ chef_train['TOTAL_MEALS_ORDERED'] +\n",
+    "                                chef_train['CONTACTS_W_CUSTOMER_SERVICE'] +\n",
+    "                                chef_train['AVG_PREP_VID_TIME'] +\n",
+    "                                chef_train['LARGEST_ORDER_SIZE'] +\n",
+    "                                chef_train['MEDIAN_MEAL_RATING'] +\n",
+    "                                chef_train['out_CONTACTS_W_CUSTOMER_SERVICE'] +\n",
+    "                                chef_train['change_AVG_PREP_VID_TIME_1'] +\n",
+    "                                chef_train['change_UNIQUE_MEALS_PURCH_0'] +\n",
+    "                                chef_train['change_CONTACTS_W_CUSTOMER_SERVICE_0'] +\n",
+    "                                chef_train['change_MEDIAN_MEAL_RATING_0'] +\n",
+    "                                chef_train['change_MEDIAN_MEAL_RATING_1'] +\n",
+    "                                chef_train['change_MASTER_CLASSES_ATTENDED_0'] +\n",
+    "                                chef_train['change_MASTER_CLASSES_ATTENDED_1'] +\n",
+    "                                chef_train['change_TOTAL_PHOTOS_VIEWED_0']\"\"\",\n",
+    "                                data = chef_train)\n",
+    "\n",
+    "\n",
+    "# Step 2: fit the model based on the data\n",
+    "results = lm_best.fit()\n",
+    "\n",
+    "\n",
+    "# Step 3: analyze the summary output\n",
+    "#print(results.summary2())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong>\n",
+    "- outliers were having a large effect on model: new testing score = 0.8279\n",
+    "<br><br>\n",
+    "Let's plot again our residual plot:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 43,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 720x720 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# setting figure size\n",
+    "fig, ax = plt.subplots(figsize = (10, 10))\n",
+    "\n",
+    "\n",
+    "# developing a residual plot\n",
+    "sns.residplot(x = out_lr_pred,  # prediction values \n",
+    "              y = y_test_out)   # actual values \n",
+    "\n",
+    "#displaying the plot\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong> \n",
+    "- there still seems to be a few outliers in our model with really big residual. It is most likely these outlier do not come from our independent variables, and is instead an outlier in Revenue, which is why our model's testing score still increased. \n",
+    "- for the purpose of this analysis, we will keep the Revenue outliers in our model, since the objective is to identify the best features to predict revenue for a new consumer. Further investigation is needed on this Revenue data point as to understand its relationship in with the selected features."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> 3. Multicollinearity </strong>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "Multicollinearity occurs when variables used to predict a target variable are highly correlated amongst themselves. It can be affecting our model since we are double counting, leading to bad predictions and higher standard errors. <br>\n",
+    "Because our model does not have many features, we can use a correlation matrix to identify which variables (if any) are higher correlated."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 46,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>TOTAL_MEALS_ORDERED</th>\n",
+       "      <th>CONTACTS_W_CUSTOMER_SERVICE</th>\n",
+       "      <th>AVG_PREP_VID_TIME</th>\n",
+       "      <th>LARGEST_ORDER_SIZE</th>\n",
+       "      <th>MEDIAN_MEAL_RATING</th>\n",
+       "      <th>out_TOTAL_MEALS_ORDERED</th>\n",
+       "      <th>out_CONTACTS_W_CUSTOMER_SERVICE</th>\n",
+       "      <th>change_AVG_PREP_VID_TIME_1</th>\n",
+       "      <th>change_UNIQUE_MEALS_PURCH_0</th>\n",
+       "      <th>change_CONTACTS_W_CUSTOMER_SERVICE_0</th>\n",
+       "      <th>change_MEDIAN_MEAL_RATING_0</th>\n",
+       "      <th>change_MEDIAN_MEAL_RATING_1</th>\n",
+       "      <th>change_MASTER_CLASSES_ATTENDED_0</th>\n",
+       "      <th>change_MASTER_CLASSES_ATTENDED_1</th>\n",
+       "      <th>change_TOTAL_PHOTOS_VIEWED_0</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>TOTAL_MEALS_ORDERED</th>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.06</td>\n",
+       "      <td>0.48</td>\n",
+       "      <td>0.36</td>\n",
+       "      <td>0.48</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>0.40</td>\n",
+       "      <td>-0.13</td>\n",
+       "      <td>-0.41</td>\n",
+       "      <td>0.07</td>\n",
+       "      <td>0.39</td>\n",
+       "      <td>0.26</td>\n",
+       "      <td>0.16</td>\n",
+       "      <td>-0.28</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>CONTACTS_W_CUSTOMER_SERVICE</th>\n",
+       "      <td>-0.06</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>-0.02</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0.14</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>-0.02</td>\n",
+       "      <td>0.70</td>\n",
+       "      <td>-0.19</td>\n",
+       "      <td>0.19</td>\n",
+       "      <td>0.01</td>\n",
+       "      <td>-0.02</td>\n",
+       "      <td>-0.03</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>AVG_PREP_VID_TIME</th>\n",
+       "      <td>0.48</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>0.80</td>\n",
+       "      <td>0.49</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>0.76</td>\n",
+       "      <td>-0.11</td>\n",
+       "      <td>-0.31</td>\n",
+       "      <td>0.08</td>\n",
+       "      <td>0.41</td>\n",
+       "      <td>0.31</td>\n",
+       "      <td>0.24</td>\n",
+       "      <td>-0.27</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>LARGEST_ORDER_SIZE</th>\n",
+       "      <td>0.36</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>0.80</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>0.35</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.04</td>\n",
+       "      <td>0.63</td>\n",
+       "      <td>-0.11</td>\n",
+       "      <td>-0.23</td>\n",
+       "      <td>0.00</td>\n",
+       "      <td>0.35</td>\n",
+       "      <td>0.23</td>\n",
+       "      <td>0.15</td>\n",
+       "      <td>-0.21</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>MEDIAN_MEAL_RATING</th>\n",
+       "      <td>0.48</td>\n",
+       "      <td>-0.02</td>\n",
+       "      <td>0.49</td>\n",
+       "      <td>0.35</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>0.40</td>\n",
+       "      <td>-0.08</td>\n",
+       "      <td>-0.40</td>\n",
+       "      <td>0.31</td>\n",
+       "      <td>0.62</td>\n",
+       "      <td>0.32</td>\n",
+       "      <td>0.10</td>\n",
+       "      <td>-0.37</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>out_TOTAL_MEALS_ORDERED</th>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>NaN</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>out_CONTACTS_W_CUSTOMER_SERVICE</th>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>0.14</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>-0.04</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>0.09</td>\n",
+       "      <td>-0.00</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>0.05</td>\n",
+       "      <td>-0.01</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_AVG_PREP_VID_TIME_1</th>\n",
+       "      <td>0.40</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>0.76</td>\n",
+       "      <td>0.63</td>\n",
+       "      <td>0.40</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.09</td>\n",
+       "      <td>-0.24</td>\n",
+       "      <td>0.09</td>\n",
+       "      <td>0.35</td>\n",
+       "      <td>0.30</td>\n",
+       "      <td>0.14</td>\n",
+       "      <td>-0.24</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_UNIQUE_MEALS_PURCH_0</th>\n",
+       "      <td>-0.13</td>\n",
+       "      <td>-0.02</td>\n",
+       "      <td>-0.11</td>\n",
+       "      <td>-0.11</td>\n",
+       "      <td>-0.08</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>-0.09</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>0.03</td>\n",
+       "      <td>-0.09</td>\n",
+       "      <td>-0.06</td>\n",
+       "      <td>0.01</td>\n",
+       "      <td>0.06</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_CONTACTS_W_CUSTOMER_SERVICE_0</th>\n",
+       "      <td>-0.41</td>\n",
+       "      <td>0.70</td>\n",
+       "      <td>-0.31</td>\n",
+       "      <td>-0.23</td>\n",
+       "      <td>-0.40</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0.09</td>\n",
+       "      <td>-0.24</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.27</td>\n",
+       "      <td>-0.12</td>\n",
+       "      <td>-0.23</td>\n",
+       "      <td>-0.09</td>\n",
+       "      <td>0.21</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_MEDIAN_MEAL_RATING_0</th>\n",
+       "      <td>0.07</td>\n",
+       "      <td>-0.19</td>\n",
+       "      <td>0.08</td>\n",
+       "      <td>0.00</td>\n",
+       "      <td>0.31</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.00</td>\n",
+       "      <td>0.09</td>\n",
+       "      <td>0.03</td>\n",
+       "      <td>-0.27</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.44</td>\n",
+       "      <td>0.12</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>-0.03</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_MEDIAN_MEAL_RATING_1</th>\n",
+       "      <td>0.39</td>\n",
+       "      <td>0.19</td>\n",
+       "      <td>0.41</td>\n",
+       "      <td>0.35</td>\n",
+       "      <td>0.62</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>0.35</td>\n",
+       "      <td>-0.09</td>\n",
+       "      <td>-0.12</td>\n",
+       "      <td>-0.44</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>0.23</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>-0.33</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_MASTER_CLASSES_ATTENDED_0</th>\n",
+       "      <td>0.26</td>\n",
+       "      <td>0.01</td>\n",
+       "      <td>0.31</td>\n",
+       "      <td>0.23</td>\n",
+       "      <td>0.32</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>0.30</td>\n",
+       "      <td>-0.06</td>\n",
+       "      <td>-0.23</td>\n",
+       "      <td>0.12</td>\n",
+       "      <td>0.23</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.25</td>\n",
+       "      <td>-0.23</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_MASTER_CLASSES_ATTENDED_1</th>\n",
+       "      <td>0.16</td>\n",
+       "      <td>-0.02</td>\n",
+       "      <td>0.24</td>\n",
+       "      <td>0.15</td>\n",
+       "      <td>0.10</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0.05</td>\n",
+       "      <td>0.14</td>\n",
+       "      <td>0.01</td>\n",
+       "      <td>-0.09</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>0.04</td>\n",
+       "      <td>-0.25</td>\n",
+       "      <td>1.00</td>\n",
+       "      <td>-0.08</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>change_TOTAL_PHOTOS_VIEWED_0</th>\n",
+       "      <td>-0.28</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>-0.27</td>\n",
+       "      <td>-0.21</td>\n",
+       "      <td>-0.37</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>-0.01</td>\n",
+       "      <td>-0.24</td>\n",
+       "      <td>0.06</td>\n",
+       "      <td>0.21</td>\n",
+       "      <td>-0.03</td>\n",
+       "      <td>-0.33</td>\n",
+       "      <td>-0.23</td>\n",
+       "      <td>-0.08</td>\n",
+       "      <td>1.00</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "                                      TOTAL_MEALS_ORDERED  CONTACTS_W_CUSTOMER_SERVICE  AVG_PREP_VID_TIME  LARGEST_ORDER_SIZE  MEDIAN_MEAL_RATING  out_TOTAL_MEALS_ORDERED  out_CONTACTS_W_CUSTOMER_SERVICE  change_AVG_PREP_VID_TIME_1  change_UNIQUE_MEALS_PURCH_0  change_CONTACTS_W_CUSTOMER_SERVICE_0  change_MEDIAN_MEAL_RATING_0  change_MEDIAN_MEAL_RATING_1  change_MASTER_CLASSES_ATTENDED_0  change_MASTER_CLASSES_ATTENDED_1  change_TOTAL_PHOTOS_VIEWED_0\n",
+       "TOTAL_MEALS_ORDERED                                  1.00                        -0.06               0.48                0.36                0.48                      NaN                            -0.03                        0.40                        -0.13                                 -0.41                         0.07                         0.39                              0.26                              0.16                         -0.28\n",
+       "CONTACTS_W_CUSTOMER_SERVICE                         -0.06                         1.00               0.04               -0.01               -0.02                      NaN                             0.14                        0.04                        -0.02                                  0.70                        -0.19                         0.19                              0.01                             -0.02                         -0.03\n",
+       "AVG_PREP_VID_TIME                                    0.48                         0.04               1.00                0.80                0.49                      NaN                            -0.03                        0.76                        -0.11                                 -0.31                         0.08                         0.41                              0.31                              0.24                         -0.27\n",
+       "LARGEST_ORDER_SIZE                                   0.36                        -0.01               0.80                1.00                0.35                      NaN                            -0.04                        0.63                        -0.11                                 -0.23                         0.00                         0.35                              0.23                              0.15                         -0.21\n",
+       "MEDIAN_MEAL_RATING                                   0.48                        -0.02               0.49                0.35                1.00                      NaN                            -0.01                        0.40                        -0.08                                 -0.40                         0.31                         0.62                              0.32                              0.10                         -0.37\n",
+       "out_TOTAL_MEALS_ORDERED                               NaN                          NaN                NaN                 NaN                 NaN                      NaN                              NaN                         NaN                          NaN                                   NaN                          NaN                          NaN                               NaN                               NaN                           NaN\n",
+       "out_CONTACTS_W_CUSTOMER_SERVICE                     -0.03                         0.14              -0.03               -0.04               -0.01                      NaN                             1.00                       -0.03                        -0.01                                  0.09                        -0.00                        -0.01                             -0.03                              0.05                         -0.01\n",
+       "change_AVG_PREP_VID_TIME_1                           0.40                         0.04               0.76                0.63                0.40                      NaN                            -0.03                        1.00                        -0.09                                 -0.24                         0.09                         0.35                              0.30                              0.14                         -0.24\n",
+       "change_UNIQUE_MEALS_PURCH_0                         -0.13                        -0.02              -0.11               -0.11               -0.08                      NaN                            -0.01                       -0.09                         1.00                                  0.04                         0.03                        -0.09                             -0.06                              0.01                          0.06\n",
+       "change_CONTACTS_W_CUSTOMER_SERVICE_0                -0.41                         0.70              -0.31               -0.23               -0.40                      NaN                             0.09                       -0.24                         0.04                                  1.00                        -0.27                        -0.12                             -0.23                             -0.09                          0.21\n",
+       "change_MEDIAN_MEAL_RATING_0                          0.07                        -0.19               0.08                0.00                0.31                      NaN                            -0.00                        0.09                         0.03                                 -0.27                         1.00                        -0.44                              0.12                              0.04                         -0.03\n",
+       "change_MEDIAN_MEAL_RATING_1                          0.39                         0.19               0.41                0.35                0.62                      NaN                            -0.01                        0.35                        -0.09                                 -0.12                        -0.44                         1.00                              0.23                              0.04                         -0.33\n",
+       "change_MASTER_CLASSES_ATTENDED_0                     0.26                         0.01               0.31                0.23                0.32                      NaN                            -0.03                        0.30                        -0.06                                 -0.23                         0.12                         0.23                              1.00                             -0.25                         -0.23\n",
+       "change_MASTER_CLASSES_ATTENDED_1                     0.16                        -0.02               0.24                0.15                0.10                      NaN                             0.05                        0.14                         0.01                                 -0.09                         0.04                         0.04                             -0.25                              1.00                         -0.08\n",
+       "change_TOTAL_PHOTOS_VIEWED_0                        -0.28                        -0.03              -0.27               -0.21               -0.37                      NaN                            -0.01                       -0.24                         0.06                                  0.21                        -0.03                        -0.33                             -0.23                             -0.08                          1.00"
+      ]
+     },
+     "execution_count": 46,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# correlation matrix\n",
+    "#fig, ax = plt.subplots(figsize=(15,15))\n",
+    "\n",
+    "# defining data frame with utilized variables\n",
+    "corr_chef = out_chef.loc[:, variables_dict['ARD Features']].drop(['REVENUE','rev_log'], axis = 1).corr().round(2)\n",
+    "\n",
+    "#sns.heatmap(corr_chef,\n",
+    "#            cmap = 'coolwarm',\n",
+    "#            square = True,\n",
+    "#            annot = True,\n",
+    "#            linecolor = 'black',\n",
+    "#            linewidths = 0.5)\n",
+    "#\n",
+    "#plt.show()\n",
+    "corr_chef"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong> \n",
+    "- there are no correlations above 0.8 so we can say that multicollinearity is not affecting our model."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> 4. Re-sampling </strong>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "Model performance is dependent on how we split train and testing. Therefore it is important to conduct cross-validation to understand how our model is capable of generalizing when seeing new data. <br>\n",
+    "<br>\n",
+    "source: DataCamp - Supervised Learning with Scikit-Learn"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Using cross_val_score to store results of cross validation\n",
+    "#cv_results = cross_val_score(out_lr, out_chef_x, out_chef_target, cv = 25)\n",
+    "#\n",
+    "#np.mean(cv_results)\n",
+    "#\n",
+    "# creating lists for cross validation score results\n",
+    "cross_val = []\n",
+    "\n",
+    "# building a visualization for different fold numbers\n",
+    "cross_val_settings = range(2, 30)\n",
+    "\n",
+    "\n",
+    "for n_folds in cross_val_settings:\n",
+    "    # Building the model\n",
+    "    cv_results = cross_val_score(out_lr, out_chef_x, out_chef_target, cv = n_folds)\n",
+    "\n",
+    "    # Recording the scores\n",
+    "    cross_val.append(np.mean(cv_results))\n",
+    "#\n",
+    "## plotting the visualization\n",
+    "#fig, ax = plt.subplots(figsize=(12,8))\n",
+    "#plt.plot(cross_val_settings, cross_val, label = \"Cross Validation Scores\")\n",
+    "#plt.ylabel(\"score\")\n",
+    "#plt.xlabel(\"number of folds\")\n",
+    "#plt.legend()\n",
+    "#plt.show()\n",
+    "#\n",
+    "# finding the optimal number of neighbors\n",
+    "max_score = cross_val.index(max(cross_val)) + 1\n",
+    "print(f\"\"\"The max score was achieved at {max_score}\"\"\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "outputs": [],
+   "source": [
+    "# Finding the highest achieved test score with cross validation\n",
+    "cross_val[11] "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "<strong> Observations: </strong> \n",
+    "- After cross-validation, our model still seems to perform really well to predict Revenue!"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "## Conclusion"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "deletable": false,
+    "editable": false
+   },
+   "source": [
+    "- Our best performing model was a Linear Regression with 15 features with a test score of 0.8279 and a cross validation score with 11 folds at 0.8086\n",
+    "- Optimal features were found using regularization methods such as Lasso and ARD Regression\n",
+    "- It is predicting the log of revenue, therefore when interpreting coefficients, it is important to transform back using 10<sup>(coef)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.3"
+  },
+  "toc": {
+   "base_numbering": 1,
+   "nav_menu": {
+    "height": "348px",
+    "width": "499px"
+   },
+   "number_sections": true,
+   "sideBar": true,
+   "skip_h1_title": false,
+   "title_cell": "Table of Contents",
+   "title_sidebar": "Contents",
+   "toc_cell": false,
+   "toc_position": {},
+   "toc_section_display": true,
+   "toc_window_display": false
+  },
+  "varInspector": {
+   "cols": {
+    "lenName": 16,
+    "lenType": 16,
+    "lenVar": 40
+   },
+   "kernels_config": {
+    "python": {
+     "delete_cmd_postfix": "",
+     "delete_cmd_prefix": "del ",
+     "library": "var_list.py",
+     "varRefreshCmd": "print(var_dic_list())"
+    },
+    "r": {
+     "delete_cmd_postfix": ") ",
+     "delete_cmd_prefix": "rm(",
+     "library": "var_list.r",
+     "varRefreshCmd": "cat(var_dic_list()) "
+    }
+   },
+   "types_to_exclude": [
+    "module",
+    "function",
+    "builtin_function_or_method",
+    "instance",
+    "_Feature"
+   ],
+   "window_display": false
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
